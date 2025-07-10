@@ -1,35 +1,39 @@
 package com.pasarku.ui;
 
+import com.pasarku.controller.UserController;
+import java.time.LocalDateTime;
 import com.pasarku.model.User;
-import com.pasarku.service.UserService;
 import com.pasarku.util.PasswordUtil;
+import com.pasarku.util.SessionManager;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.time.LocalDateTime;
 
 public class LoginFrame extends JFrame {
     private JTextField usernameField;
     private JPasswordField passwordField;
-    private JButton loginButton;
-    private JButton registerButton;
-    private UserService userService = new UserService();
-
+    private final UserController userController;
+    
     public LoginFrame() {
+        this.userController = new UserController();
+        initializeUI();
+    }
+
+    private void initializeUI() {
         setTitle("PasarKu - Login/Register");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(400, 250);
         setLocationRelativeTo(null);
         
-        // Main panel with padding
         JPanel mainPanel = new JPanel(new GridBagLayout());
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         
-        // Title label
+        // Title
         gbc.gridwidth = 2;
         gbc.gridx = 0;
         gbc.gridy = 0;
@@ -63,95 +67,90 @@ public class LoginFrame extends JFrame {
         gbc.fill = GridBagConstraints.CENTER;
         
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
-        loginButton = new JButton("Login");
+        JButton loginButton = new JButton("Login");
         loginButton.setPreferredSize(new Dimension(100, 30));
-        registerButton = new JButton("Register");
+        JButton registerButton = new JButton("Register");
         registerButton.setPreferredSize(new Dimension(100, 30));
+        
+        loginButton.addActionListener(this::handleLogin);
+        registerButton.addActionListener(this::handleRegister);
+        passwordField.addActionListener(this::handleLogin);
         
         buttonPanel.add(loginButton);
         buttonPanel.add(registerButton);
         mainPanel.add(buttonPanel, gbc);
         
         add(mainPanel);
-        
-        // Action listeners
-        loginButton.addActionListener(this::loginAction);
-        registerButton.addActionListener(this::registerAction);
-        
-        // Enter key support
-        passwordField.addActionListener(this::loginAction);
     }
 
-    private void loginAction(ActionEvent e) {
+    private void handleLogin(ActionEvent e) {
         String username = usernameField.getText().trim();
         String password = new String(passwordField.getPassword());
         
         if (username.isEmpty() || password.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Username dan password harus diisi", 
-                "Error", JOptionPane.ERROR_MESSAGE);
+            showError("Username dan password harus diisi");
             return;
         }
         
         try {
-            User user = userService.findByUsername(username);
-            if (user != null && PasswordUtil.verifyPassword(password, user.getPasswordHash())) {
+            User user = userController.authenticate(username, password);
+            if (user != null) {
                 SessionManager.setCurrentUser(user);
-                JOptionPane.showMessageDialog(this, "Login sukses!");
-                
-                // Open appropriate dashboard based on role
-                if ("admin".equalsIgnoreCase(user.getRole())) {
-                    new AdminDashboardFrame().setVisible(true);
-                } else {
-                    new UserDashboardFrame().setVisible(true);
-                }
-                this.dispose();
+                showSuccess("Login sukses!");
+                openDashboard(user);
+                dispose();
             } else {
-                JOptionPane.showMessageDialog(this, "Username/password salah", 
-                    "Error", JOptionPane.ERROR_MESSAGE);
+                showError("Username/password salah");
             }
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage(), 
-                "Error", JOptionPane.ERROR_MESSAGE);
+            showError("Error: " + ex.getMessage());
             ex.printStackTrace();
         }
     }
 
-    private void registerAction(ActionEvent e) {
+    private void handleRegister(ActionEvent e) {
         String username = usernameField.getText().trim();
         String password = new String(passwordField.getPassword());
-        
+
         if (username.isEmpty() || password.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Username dan password harus diisi", 
-                "Error", JOptionPane.ERROR_MESSAGE);
+            showError("Username dan password harus diisi");
             return;
         }
-        
+
         if (password.length() < 6) {
-            JOptionPane.showMessageDialog(this, "Password minimal 6 karakter", 
-                "Error", JOptionPane.ERROR_MESSAGE);
+            showError("Password minimal 6 karakter");
             return;
         }
-        
+
         try {
-            if (userService.findByUsername(username) != null) {
-                JOptionPane.showMessageDialog(this, "Username sudah terdaftar", 
-                    "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-            
-            User user = new User();
-            user.setUsername(username);
-            user.setPasswordHash(PasswordUtil.hashPassword(password));
-            user.setEmail(username + "@pasarku.com");
-            user.setCreatedAt(LocalDateTime.now());
-            user.setRole(userService.findAll().isEmpty() ? "admin" : "user");
-            
-            userService.register(user);
-            JOptionPane.showMessageDialog(this, "Registrasi sukses! Silakan login.");
+            // Create a new user with all required fields
+            User newUser = new User();
+            newUser.setUsername(username);
+            newUser.setPasswordHash(PasswordUtil.hashPassword(password));
+            newUser.setEmail(username + "@pasarku.com");
+            newUser.setRole(userController.determineUserRole()); // Use controller's existing method
+            newUser.setCreatedAt(LocalDateTime.now());
+
+            userController.registerUser(newUser);
+            showSuccess("Registrasi sukses! Silakan login.");
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage(), 
-                "Error", JOptionPane.ERROR_MESSAGE);
-            ex.printStackTrace();
+            showError(ex.getMessage());
         }
+    }
+
+    private void openDashboard(User user) {
+        if (user.getRole() == User.UserRole.ADMIN) {
+            new AdminDashboardFrame().setVisible(true);
+        } else {
+            new UserDashboardFrame().setVisible(true);
+        }
+    }
+
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void showSuccess(String message) {
+        JOptionPane.showMessageDialog(this, message, "Sukses", JOptionPane.INFORMATION_MESSAGE);
     }
 }

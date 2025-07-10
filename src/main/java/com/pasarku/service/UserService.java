@@ -3,9 +3,14 @@ package com.pasarku.service;
 import com.pasarku.dao.GenericDao;
 import com.pasarku.model.User;
 import java.util.List;
+import java.util.Optional;
 
 public class UserService {
-    private GenericDao<User, Integer> userDao = new GenericDao<>(User.class);
+    private final GenericDao<User, Integer> userDao;
+    
+    public UserService() {
+        this.userDao = new GenericDao<>(User.class);
+    }
 
     public void register(User user) {
         userDao.save(user);
@@ -28,8 +33,8 @@ public class UserService {
     }
 
     public User findByUsername(String username) {
-        return userDao.findAll().stream()
-                .filter(u -> u.getUsername().equalsIgnoreCase(username))
+        return userDao.findByAttribute("username", username)
+                .stream()
                 .findFirst()
                 .orElse(null);
     }
